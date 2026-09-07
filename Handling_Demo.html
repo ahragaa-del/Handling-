@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Ahlan Masr — Handling Voice Adviser Demo</title>
+<style>
+  :root{
+    --navy:#161F3D; --navy-deep:#101731; --sand:#F4E9D6; --sand-dim:#E4D5BC;
+    --sunset:#E8873C; --sunset-deep:#C96A25; --sage:#9FC5B8; --ink:#22283D;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; min-height:100vh;
+    background:linear-gradient(175deg,var(--navy) 0%,var(--navy-deep) 70%);
+    font-family:'Segoe UI',Tahoma,'Noto Sans Arabic',Arial,sans-serif;
+    display:flex; justify-content:center;
+  }
+  #app{width:100%; max-width:460px; display:flex; flex-direction:column; min-height:100vh; padding-bottom:26px;}
+  header{padding:18px 18px 10px; display:flex; align-items:center; justify-content:space-between;}
+  .brand{color:var(--sand); font-weight:800; font-size:20px; line-height:1.1;}
+  .tag{color:var(--sage); font-size:12px; margin-top:3px;}
+  .langs{display:flex; gap:6px;}
+  .langbtn{padding:7px 13px; border-radius:999px; border:1px solid rgba(244,233,214,.25);
+    background:transparent; color:var(--sand); font-weight:700; font-size:13px; cursor:pointer;}
+  .langbtn.on{background:var(--sunset); border-color:var(--sunset); color:var(--navy-deep);}
+
+  /* voice-availability notice */
+  #notice{margin:8px 14px 0; padding:10px 13px; border-radius:12px; display:none;
+    background:rgba(232,135,60,.10); border:1px solid rgba(232,135,60,.35);
+    color:var(--sand-dim); font-size:12.5px; line-height:1.55;}
+  #notice.show{display:block;}
+  #notice b{color:var(--sunset);}
+  #notice .x{float:inline-end; background:none; border:none; color:var(--sand-dim);
+    font-size:15px; cursor:pointer; padding:0 0 0 8px; opacity:.6;}
+
+  .budget{margin:6px 14px 0; padding:13px 16px; border-radius:16px;
+    background:rgba(244,233,214,.06); border:1px solid rgba(244,233,214,.12);
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 8px;}
+  .stat .l{font-size:11px; color:var(--sage);}
+  .stat .v{font-size:17px; font-weight:700; color:var(--sand); white-space:nowrap;}
+  .stat .s{font-size:10.5px; color:var(--sand-dim); opacity:.75;}
+  .spend{grid-column:span 2;}
+  .spend .l{font-size:11px; color:var(--sunset); font-weight:700;}
+  .spend .v{font-size:24px; font-weight:800; color:var(--sunset); line-height:1.15;}
+  .spend .v small{font-size:13px; font-weight:600;}
+  .spend .s{font-size:11px; color:var(--sand-dim);}
+  #chat{flex:1; overflow-y:auto; padding:16px 14px 8px; display:flex; flex-direction:column; gap:10px;}
+  .msg{max-width:85%; padding:10px 14px; font-size:15px; line-height:1.55;}
+  .msg.user{background:rgba(244,233,214,.12); color:var(--sand); border-radius:16px 16px 16px 4px;}
+  .msg.bot{background:var(--sand); color:var(--ink); border-radius:16px 16px 4px 16px;}
+  .msg.sys{background:rgba(232,135,60,.12); border:1px solid rgba(232,135,60,.3);
+    color:var(--sand-dim); font-size:13.5px; border-radius:14px; align-self:center; max-width:95%;}
+  [dir="rtl"] .msg.user{align-self:flex-start;} [dir="rtl"] .msg.bot{align-self:flex-end;}
+  [dir="ltr"] .msg.user{align-self:flex-end;}  [dir="ltr"] .msg.bot{align-self:flex-start;}
+  .listen{display:block; margin-top:6px; background:none; border:none; padding:0; cursor:pointer; font-size:15px; opacity:.7;}
+  #chips{display:flex; gap:7px; overflow-x:auto; padding:4px 14px 10px;}
+  .chip{flex-shrink:0; padding:8px 13px; border-radius:999px; border:1px solid rgba(244,233,214,.28);
+    background:transparent; color:var(--sand); font-size:12.5px; cursor:pointer;}
+  #inrow{display:flex; align-items:center; gap:10px; padding:0 14px;}
+  #txt{flex:1; padding:13px 15px; border-radius:14px; border:1px solid rgba(244,233,214,.22);
+    background:rgba(244,233,214,.07); color:var(--sand); font-size:14.5px; outline:none;}
+  #txt::placeholder{color:rgba(244,233,214,.5);}
+  #send{width:44px; height:44px; border-radius:12px; border:1px solid rgba(244,233,214,.22);
+    background:rgba(244,233,214,.07); color:var(--sand); font-size:17px; cursor:pointer; flex-shrink:0;}
+  #mic{width:62px; height:62px; border-radius:50%; border:none; cursor:pointer; flex-shrink:0;
+    background:var(--sunset); box-shadow:0 6px 18px rgba(0,0,0,.35);
+    display:flex; align-items:center; justify-content:center; transition:box-shadow .3s, background .3s, opacity .3s;}
+  #mic.rec{background:var(--sunset-deep);
+    box-shadow:0 0 0 9px rgba(232,135,60,.22), 0 0 0 18px rgba(232,135,60,.10);}
+  #mic.off{opacity:.4;}
+  #hint{text-align:center; color:var(--sage); font-size:12px; padding-top:8px; min-height:18px;}
+  #hint.rec{color:var(--sunset);}
+  #hint.warn{color:var(--sunset);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <div class="brand" id="brand"></div>
+      <div class="tag" id="tag"></div>
+    </div>
+    <div class="langs">
+      <button class="langbtn" id="bAr" onclick="setLang('ar')">عربي</button>
+      <button class="langbtn" id="bEn" onclick="setLang('en')">EN</button>
+    </div>
+  </header>
+
+  <div id="notice"></div>
+  <div class="budget" id="budget"></div>
+  <div id="chat"></div>
+  <div id="chips"></div>
+
+  <div id="inrow">
+    <input id="txt" autocomplete="off">
+    <button id="send" onclick="ask(document.getElementById('txt').value)" aria-label="send">➜</button>
+    <button id="mic" onclick="toggleMic()" aria-label="talk">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <rect x="9" y="3" width="6" height="11" rx="3" fill="#101731"/>
+        <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" stroke="#101731" stroke-width="2" stroke-linecap="round"/>
+        <path d="M12 18v3" stroke="#101731" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <div id="hint"></div>
+</div>
+
+<script>
+/* ---------- Sample profile & deterministic budget engine ---------- */
+const PROFILE = {
+  salary: 42000, payday: 1,
+  obligations: [
+    {ar:"الإيجار",           en:"Rent",              amount:12000, dueDay:5},
+    {ar:"مصاريف المدرسة",    en:"School fees",        amount:6500,  dueDay:10},
+    {ar:"الكهرباء والمياه",  en:"Utilities",          amount:1800,  dueDay:15},
+    {ar:"التليفون والنت",    en:"Telecom",            amount:600,   dueDay:12},
+    {ar:"قسط الموبايل",      en:"Phone installment",  amount:1500,  dueDay:20},
+  ],
+  reserve:{current:21000, targetMonths:3},
+  goal:{ar:"عمرة رمضان", en:"Ramadan Umrah", target:60000, saved:18000, byMonths:7},
+};
+const TODAY_DAY = 3;
+const oblig = PROFILE.obligations.reduce((s,o)=>s+o.amount,0);
+const reserveTarget = oblig * PROFILE.reserve.targetMonths;
+const reserveContribution = PROFILE.reserve.current < reserveTarget ? Math.round(PROFILE.salary*0.1) : 0;
+const goalMonthly = Math.ceil((PROFILE.goal.target-PROFILE.goal.saved)/PROFILE.goal.byMonths);
+const SPEND = PROFILE.salary - oblig - reserveContribution - goalMonthly;
+const PERDAY = Math.round(SPEND/30);
+const fmt = n => n.toLocaleString('en-US');
+
+/* ---------- Copy ---------- */
+const COPY = {
+ ar:{dir:'rtl', brand:'أهلاً مصر', tag:'المستشار المالي الصوتي — «هاندلينج»',
+  labels:{sal:'المرتب',ob:'الالتزامات',res:'الاحتياطي',goal:'هدف العمرة',sp:'تقدر تصرف',pd:'في اليوم تقريبًا',items:'٥ التزامات'},
+  chips:['معايا كام أصرفهم الشهر ده؟','الفلوس الزيادة أعمل بيها إيه؟','آخد قرض ولا أستنى؟','أقدر أشتري موبايل بـ٣٠ ألف؟','فاضل عليا إيه الشهر ده؟','أحط الاحتياطي فين؟'],
+  ph:'أو اكتب سؤالك هنا…', tap:'دوس واتكلم', listening:'بسمعك…',
+  typeInstead:'الصوت مش متاح هنا — اكتب سؤالك',
+  greeting:'أهلاً يا أحمد! أنا هاندلينج، مستشارك المالي. اسألني عن فلوسك — بالصوت أو بالكتابة.',
+
+  /* --- accurate, cause-specific microphone messages --- */
+  micEmbedded:'الصفحة شغالة جوّه إطار (iframe) — والإطار ده هو اللي مانع الميكروفون، مش المتصفح ولا اللينك. افتح التطبيق كصفحة مستقلة (لينك مباشر) والصوت هيشتغل عادي. الكتابة شغالة هنا طول الوقت.',
+  micEmbediOS:'إنت على آيفون والصفحة جوّه إطار (iframe) — نظام iOS بيمنع الميكروفون في الحالة دي تمامًا، ومش هيظهرلك سؤال إذن أصلًا. ارفع الملف على استضافة https (زي Netlify Drop) وافتح اللينك المباشر، وساعتها الميكروفون هيشتغل. لحد ما تعمل كده اكتب سؤالك وأنا هرد بالصوت 🔊.',
+  micDenied:'المتصفح رافض إذن الميكروفون. افتح إعدادات الموقع من شريط العنوان (أيقونة 🔒 أو ⓘ) → «الميكروفون» → «سماح»، وبعدين اعمل تحديث للصفحة وجرّب تاني.',
+  micNoDevice:'مفيش ميكروفون متاح على الجهاز، أو حاجة تانية ماسكاه دلوقتي. اقفل أي مكالمة أو تطبيق تسجيل شغال وجرّب تاني.',
+  micInsecure:'الصفحة مفتوحة بلينك مش آمن (http). الميكروفون بيشتغل بس على https أو localhost. افتحها بلينك https.',
+  micUnsupported:'المتصفح ده مش بيدعم التعرف على الصوت — جرّب Chrome على الكمبيوتر أو Safari على الآيفون، أو استخدم الكتابة واسمع الرد بـ 🔊.',
+  micLangUnsupported:'المتصفح مش لاقي دعم للعربي في التعرف على الصوت. جرّب Chrome، أو اكتب سؤالك بالعربي عادي.',
+  micGeneric:'حصلت مشكلة وأنا بحاول أفتح الميكروفون. جرّب تاني، ولو فضلت المشكلة اكتب سؤالك وأنا معاك.',
+  micNoSpeech:'مسمعتش حاجة. قرّب الميكروفون شوية ودوس واتكلم تاني.',
+  ttsUnavailable:'الصوت الصادر مش متاح على المتصفح ده — بس الردود مكتوبة قدامك.',
+  noticeEmbedded:'<b>ملاحظة:</b> الصفحة معروضة جوّه إطار، والميكروفون متقفل فيه. الكتابة شغالة عادي — وللصوت افتح اللينك المباشر.'},
+
+ en:{dir:'ltr', brand:'Ahlan Masr', tag:'Handling — your voice wealth adviser',
+  labels:{sal:'Salary',ob:'Obligations',res:'Reserve',goal:'Umrah goal',sp:'You can spend',pd:'per day, roughly',items:'5 items'},
+  chips:['How much can I spend this month?','What should I do with the extra money?','Should I take a loan or wait?','Can I afford a 30k phone?','What bills are left this month?','Where should I put my reserve?'],
+  ph:'Or type your question…', tap:'Tap & talk', listening:'Listening…',
+  typeInstead:'Voice unavailable here — type instead',
+  greeting:"Hi Ahmed! I'm Handling, your money adviser. Ask me anything about your budget — speak or type.",
+
+  micEmbedded:"This page is running inside an iframe, and the iframe is what's blocking the microphone — not your browser and not the link. Open the app as a standalone page (a direct link) and voice will work. Typing works here either way.",
+  micEmbediOS:"You're on iOS and this page is inside an iframe — iOS blocks microphone access completely in that case, so you'll never even see a permission prompt. Put the file on any https host (Netlify Drop is easiest) and open the direct link; the mic will work there. Until then, type and I'll answer out loud 🔊.",
+  micDenied:'Your browser has denied microphone permission. Open site settings from the address bar (🔒 or ⓘ icon) → Microphone → Allow, then reload and try again.',
+  micNoDevice:'No microphone is available, or something else is holding it. Close any call or recording app and try again.',
+  micInsecure:'This page is on an insecure link (http). Microphones only work on https or localhost. Open it over https.',
+  micUnsupported:"This browser doesn't support voice input — try Chrome on desktop or Safari on iPhone, or type and listen with 🔊.",
+  micLangUnsupported:"This browser has no speech-recognition support for Arabic. Try Chrome, or just type your question.",
+  micGeneric:'Something went wrong opening the microphone. Try again — and if it persists, type your question and I\'m still here.',
+  micNoSpeech:"I didn't hear anything. Move a bit closer and tap to talk again.",
+  ttsUnavailable:"Spoken replies aren't available in this browser — but the answers are written above.",
+  noticeEmbedded:'<b>Note:</b> this page is shown inside an iframe, where the microphone is blocked. Typing works normally — for voice, open the direct link.'}
+};
+
+/* ---------- Built-in adviser brain (rule-based, masri) ---------- */
+function parseAmount(t){
+  t = t.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  let m = t.match(/(\d[\d,\.]*)\s*(k|K|ألف|الف|thousand)?/);
+  if(!m || !m[1]) return null;
+  let n = parseFloat(m[1].replace(/,/g,''));
+  if(m[2]) n *= 1000;
+  else if(n <= 200) n *= 1000;
+  return Math.round(n);
+}
+function remaining(){ return PROFILE.obligations.filter(o=>o.dueDay>=TODAY_DAY); }
+
+function answer(q, lang){
+  const t = q.toLowerCase();
+  const has = (...ws) => ws.some(w => t.includes(w));
+  const ar = lang==='ar';
+
+  if(has('أصرف','اصرف','معايا كام','how much can i spend','spend this month','spendable')){
+    return ar
+      ? `تقدر تصرف براحتك ${fmt(SPEND)} جنيه الشهر ده — يعني حوالي ${fmt(PERDAY)} جنيه في اليوم. ده بعد ما خليت الالتزامات والاحتياطي وحصة العمرة على جنب.`
+      : `You can comfortably spend ${fmt(SPEND)} EGP this month — about ${fmt(PERDAY)} EGP a day. That's after I set aside your obligations, reserve, and the Umrah contribution.`;
+  }
+  if(has('فاضل','فواتير','التزامات','bills','left this month','obligations')){
+    const r = remaining(); const tot = r.reduce((s,o)=>s+o.amount,0);
+    const list = r.map(o=> ar? `${o.ar} (${fmt(o.amount)} يوم ${o.dueDay})` : `${o.en} (${fmt(o.amount)} on day ${o.dueDay})`).join(ar?'، ':', ');
+    return ar
+      ? `فاضل عليك ${r.length} التزامات بإجمالي ${fmt(tot)} جنيه: ${list}. متقلقش — كلهم محجوزين من المرتب خلاص.`
+      : `You have ${r.length} obligations left totaling ${fmt(tot)} EGP: ${list}. Don't worry — they're already reserved from your salary.`;
+  }
+  if(has('المدرسة','ميعاد المدرسة','school')){
+    return ar
+      ? `مصاريف المدرسة ٦٬٥٠٠ جنيه، وميعادها يوم ١٠ — يعني بعد ${10-TODAY_DAY} أيام. الفلوس محجوزة ليها بالفعل، فمفيش قلق.`
+      : `School fees are 6,500 EGP, due on day 10 — that's ${10-TODAY_DAY} days from now. The money is already set aside, so you're covered.`;
+  }
+  if(has('الزيادة','زيادة','أعمل بيها','extra money','surplus','extra'))
+    return ar
+      ? `الزيادة الشهر ده ${fmt(SPEND)} جنيه بعد كل حاجة. اقتراحي: سيب منها حوالي ${fmt(Math.round(SPEND*0.6))} للمصاريف اليومية، والباقي زوّد بيه حصة العمرة عشان تخلص الهدف بدري.`
+      : `Your surplus this month is ${fmt(SPEND)} EGP after everything. My suggestion: keep about ${fmt(Math.round(SPEND*0.6))} for daily spending and add the rest to your Umrah goal to finish it early.`;
+  if(has('احتياطي','أحط','حط ال','reserve','where should i put')){
+    return ar
+      ? `احتياطيك دلوقتي ${fmt(PROFILE.reserve.current)} من أصل ${fmt(reserveTarget)} جنيه (٣ شهور التزامات). حط شهر واحد منه في حساب توفير يومي عشان الطوارئ، والباقي في شهادة بعائد شهري من بنك مصر — سيولة وعائد مع بعض.`
+      : `Your reserve is ${fmt(PROFILE.reserve.current)} of a ${fmt(reserveTarget)} EGP target (3 months of obligations). Keep one month of it in a daily-access savings account for emergencies, and put the rest in a Banque Misr monthly-interest certificate — liquidity and yield together.`;
+  }
+  if(has('قرض','سلفة','اقترض','loan','borrow')){
+    const oneMonth = oblig;
+    const ok = PROFILE.reserve.current >= oneMonth;
+    return ar
+      ? (ok
+        ? `ممكن، بس بشرط واحد: القسط الشهري ميزيدش عن ${fmt(Math.round(SPEND*0.25))} جنيه — يعني ربع اللي بتصرفه. أكتر من كده هيضغط عليك، وساعتها الأحسن تستنى شهرين وتحوّش الفرق.`
+        : `أنصحك تستنى — احتياطيك لسه أقل من شهر التزامات. كمّل الاحتياطي الأول وبعدين نتكلم في القرض.`)
+      : (ok
+        ? `You can, with one condition: the monthly installment should not exceed ${fmt(Math.round(SPEND*0.25))} EGP — a quarter of your spendable money. More than that will squeeze you; better to wait two months and save the difference.`
+        : `I'd wait — your reserve is below one month of obligations. Build the reserve first, then we talk about the loan.`);
+  }
+  if(has('أشتري','اشتري','afford','buy','موبايل','عربية','phone','can i')){
+    const price = parseAmount(q);
+    if(price){
+      if(price <= SPEND*0.5)
+        return ar
+          ? `آه تقدر وبراحتك — ${fmt(price)} جنيه أقل من نص اللي متاح ليك الشهر ده (${fmt(SPEND)}). اشتريها ومتفكرش كتير.`
+          : `Yes, comfortably — ${fmt(price)} EGP is less than half your spendable money this month (${fmt(SPEND)}). Go for it.`;
+      if(price <= SPEND)
+        return ar
+          ? `تقدر، بس باقي الشهر هيبقى مضغوط — هيفضل معاك حوالي ${fmt(Math.round((SPEND-price)/27))} جنيه في اليوم. لو مستعجل خد قرارك، لو لأ استنى الشهر الجاي.`
+          : `You can, but the rest of the month will be tight — you'd have about ${fmt(Math.round((SPEND-price)/27))} EGP a day left. If it's urgent go ahead; if not, next month is easier.`;
+      const monthly = 5000, months = Math.ceil(price/monthly);
+      return ar
+        ? `${fmt(price)} جنيه أكتر من المتاح الشهر ده (${fmt(SPEND)}). بلاش ضغط — حوّش ${fmt(monthly)} جنيه شهريًا لمدة ${months} شهور وهتشتريها كاش من غير ما تحس.`
+        : `${fmt(price)} EGP is more than this month's spendable (${fmt(SPEND)}). No need to strain — save ${fmt(monthly)} EGP a month for ${months} months and buy it in cash without feeling it.`;
+    }
+  }
+  if(has('أحوش','احوش','عمرة','save for','umrah','goal')){
+    const left = PROFILE.goal.target - PROFILE.goal.saved;
+    return ar
+      ? `هدف العمرة: جمعت ${fmt(PROFILE.goal.saved)} من ${fmt(PROFILE.goal.target)} جنيه — فاضل ${fmt(left)}. بمعدل ${fmt(goalMonthly)} شهريًا هتوصل قبل رمضان بإذن الله. ماشي على الخطة تمام.`
+      : `Umrah goal: you've saved ${fmt(PROFILE.goal.saved)} of ${fmt(PROFILE.goal.target)} EGP — ${fmt(left)} to go. At ${fmt(goalMonthly)} a month you'll make it before Ramadan, insha'Allah. Right on plan.`;
+  }
+  if(has('المرتب','مرتب نزل','رتبه','salary arrived','organize')){
+    return ar
+      ? `تمام! رتبت المرتب كده: ${fmt(oblig)} للالتزامات، ${fmt(reserveContribution)} للاحتياطي، ${fmt(goalMonthly)} للعمرة — وفاضل ليك ${fmt(SPEND)} جنيه تصرفهم براحتك.`
+      : `Done! Here's how I organized the salary: ${fmt(oblig)} for obligations, ${fmt(reserveContribution)} to the reserve, ${fmt(goalMonthly)} to Umrah — leaving you ${fmt(SPEND)} EGP to spend freely.`;
+  }
+  if(has('صرفت كام','الأكل','spent on','food last month')){
+    return ar
+      ? `الشهر اللي فات صرفت حوالي ٧٬٢٠٠ جنيه على الأكل — ده في المعدل الطبيعي بالنسبة لدخلك. لو عايز نقلله، أقدر أظبطلك حد أسبوعي.`
+      : `Last month you spent about 7,200 EGP on food — that's within the normal range for your income. If you want to trim it, I can set a weekly cap for you.`;
+  }
+  if(has('ليه','why')){
+    return ar
+      ? `بحسبها كده: مرتبك ${fmt(PROFILE.salary)}، بخصم الالتزامات ${fmt(oblig)}، وحصة الاحتياطي ${fmt(reserveContribution)}، وحصة العمرة ${fmt(goalMonthly)} — يفضل ${fmt(SPEND)} جنيه ليك. كل رقم بقولهولك له سبب من دول.`
+      : `Here's my math: salary ${fmt(PROFILE.salary)}, minus obligations ${fmt(oblig)}, reserve ${fmt(reserveContribution)}, and Umrah ${fmt(goalMonthly)} — leaving ${fmt(SPEND)} EGP for you. Every number I give comes from one of these.`;
+  }
+  if(has('بورصة','أسهم','بيتكوين','كريبتو','دولار أستثمر','stock','crypto','bitcoin','invest in')){
+    return ar
+      ? `أنا بساعدك ترتب فلوسك — قرارات البورصة والعملات دي مش شغلتي. اللي أقدر أقولهولك: ظبط احتياطيك الأول، وبعدين أي استثمار يبقى من الزيادة بس.`
+      : `I help you organize your money — stock and crypto calls aren't my job. What I can say: complete your reserve first, and only ever invest from your surplus.`;
+  }
+  return ar
+    ? `مش متأكد إني فهمتك صح. اسألني مثلًا: "معايا كام أصرفهم؟"، "آخد قرض ولا أستنى؟"، "أقدر أشتري حاجة بكذا؟"، أو "أحط الاحتياطي فين؟"`
+    : `I'm not sure I caught that. Try asking: "How much can I spend?", "Should I take a loan?", "Can I afford something for X?", or "Where should I put my reserve?"`;
+}
+
+/* ================= UI ================= */
+let lang='ar', listening=false, rec=null, arFallbackTried=false;
+const $=id=>document.getElementById(id);
+
+/* ---------- environment probes ---------- */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+           || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+
+function isEmbedded(){
+  try { return window.self !== window.top; } catch(e){ return true; }
+}
+function micAllowedByPolicy(){
+  // Chrome-only introspection; undefined elsewhere
+  try{
+    const fp = document.featurePolicy || document.permissionsPolicy;
+    if(fp && typeof fp.allowsFeature==='function') return fp.allowsFeature('microphone');
+  }catch(e){}
+  return null; // unknown
+}
+function embeddedMicBlocked(){
+  if(!isEmbedded()) return false;
+  const policy = micAllowedByPolicy();
+  if(policy === true) return false;   // iframe explicitly allows it
+  return true;                        // blocked, or we can't tell (iOS/WebKit)
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ---------- rendering ---------- */
+function setLang(l){
+  lang=l;
+  const c=COPY[l];
+  document.documentElement.lang=l; $('app').dir=c.dir;
+  $('brand').textContent=c.brand; $('tag').textContent=c.tag;
+  $('bAr').className='langbtn'+(l==='ar'?' on':''); $('bEn').className='langbtn'+(l==='en'?' on':'');
+  $('txt').placeholder=c.ph;
+  const L=c.labels;
+  $('budget').innerHTML=`
+    <div class="stat"><div class="l">${L.sal}</div><div class="v">${fmt(PROFILE.salary)}</div><div class="s">EGP</div></div>
+    <div class="stat"><div class="l">${L.ob}</div><div class="v">− ${fmt(oblig)}</div><div class="s">${L.items}</div></div>
+    <div class="stat"><div class="l">${L.res}</div><div class="v">− ${fmt(reserveContribution)}</div><div class="s">${fmt(PROFILE.reserve.current)} / ${fmt(reserveTarget)}</div></div>
+    <div class="stat"><div class="l">${L.goal}</div><div class="v">− ${fmt(goalMonthly)}</div><div class="s">${fmt(PROFILE.goal.saved)} / ${fmt(PROFILE.goal.target)}</div></div>
+    <div class="stat spend"><div class="l">${L.sp}</div><div class="v">${fmt(SPEND)} <small>EGP</small></div><div class="s">≈ ${fmt(PERDAY)} ${L.pd}</div></div>`;
+  $('chips').innerHTML=c.chips.map(q=>`<button class="chip" onclick="ask(this.textContent)">${q}</button>`).join('');
+  $('chat').innerHTML='';
+  addMsg('bot', c.greeting);
+  try{ speechSynthesis.cancel(); }catch(e){}
+  applyVoiceState();
+}
+
+function applyVoiceState(){
+  const c=COPY[lang];
+  const blocked = !SR || !window.isSecureContext || embeddedMicBlocked();
+  $('mic').classList.toggle('off', blocked);
+  $('hint').classList.toggle('warn', blocked);
+  $('hint').textContent = blocked ? c.typeInstead : c.tap;
+  const n=$('notice');
+  if(embeddedMicBlocked()){ n.innerHTML = '<button class="x" onclick="this.parentNode.classList.remove(\'show\')">✕</button>' + c.noticeEmbedded; n.classList.add('show'); }
+  else n.classList.remove('show');
+}
+
+function addMsg(role, text){
+  const d=document.createElement('div');
+  d.className='msg '+role;
+  d.textContent=text;
+  if(role==='bot'){
+    const b=document.createElement('button');
+    b.className='listen'; b.textContent='🔊'; b.onclick=()=>speak(text);
+    d.appendChild(b);
+  }
+  $('chat').appendChild(d);
+  $('chat').scrollTop=$('chat').scrollHeight;
+}
+
+function ask(q){
+  primeTTS();
+  q=(q||'').trim(); if(!q) return;
+  addMsg('user', q); $('txt').value='';
+  const a=answer(q, lang);
+  setTimeout(()=>{ addMsg('bot', a); speak(a); }, 350);
+}
+$('txt').addEventListener('keydown', e=>{ if(e.key==='Enter') ask($('txt').value); });
+
+/* ---------- speech OUT ---------- */
+let ttsPrimed=false, ttsWarned=false;
+function primeTTS(){
+  if(ttsPrimed || !window.speechSynthesis) return;
+  try{
+    const u=new SpeechSynthesisUtterance(' ');
+    u.volume=0; speechSynthesis.speak(u); ttsPrimed=true;
+  }catch(e){}
+}
+function speak(text){
+  if(!window.speechSynthesis){
+    if(!ttsWarned){ ttsWarned=true; addMsg('sys', COPY[lang].ttsUnavailable); }
+    return;
+  }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  const go=()=>{
+    try{
+      const u=new SpeechSynthesisUtterance(text);
+      const vs=speechSynthesis.getVoices()||[];
+      const pref= lang==='ar'
+        ? (vs.find(v=>(v.lang||'').toLowerCase().replace('_','-').startsWith('ar-eg'))||vs.find(v=>(v.lang||'').toLowerCase().startsWith('ar')))
+        : vs.find(v=>(v.lang||'').toLowerCase().startsWith('en'));
+      if(pref) u.voice=pref;
+      u.lang= lang==='ar' ? 'ar-EG':'en-US';
+      u.rate=0.98;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  };
+  if((speechSynthesis.getVoices()||[]).length) go();
+  else { speechSynthesis.onvoiceschanged=()=>{ speechSynthesis.onvoiceschanged=null; go(); }; setTimeout(go, 600); }
+}
+
+/* ---------- speech IN ---------- */
+function voiceFail(key){
+  addMsg('sys', COPY[lang][key] || COPY[lang].micGeneric);
+  applyVoiceState();
+}
+
+/* Async diagnosis — runs only AFTER a real failure, so it never
+   consumes the user gesture that SpeechRecognition.start() needs. */
+async function diagnoseMic(){
+  const c=COPY[lang];
+  if(!window.isSecureContext) return voiceFail('micInsecure');
+  if(embeddedMicBlocked()) return voiceFail(isIOS ? 'micEmbediOS' : 'micEmbedded');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return voiceFail(isEmbedded() ? (isIOS?'micEmbediOS':'micEmbedded') : 'micUnsupported');
+  }
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({audio:true});
+    s.getTracks().forEach(t=>t.stop());
+    voiceFail('micGeneric');           // mic itself is fine; recognition failed
+  }catch(e){
+    const n = e && e.name;
+    if(n==='NotAllowedError' || n==='SecurityError')
+      voiceFail(isEmbedded() ? (isIOS?'micEmbediOS':'micEmbedded') : 'micDenied');
+    else if(n==='NotFoundError' || n==='OverconstrainedError') voiceFail('micNoDevice');
+    else if(n==='NotReadableError' || n==='AbortError')       voiceFail('micNoDevice');
+    else voiceFail('micGeneric');
+  }
+}
+
+function stopListening(){
+  listening=false;
+  $('mic').classList.remove('rec');
+  $('hint').classList.remove('rec');
+  applyVoiceState();
+}
+
+function startRecognition(langTag){
+  rec = new SR();
+  rec.lang = langTag;
+  rec.interimResults=false; rec.maxAlternatives=1; rec.continuous=false;
+
+  rec.onstart = ()=>{
+    listening=true;
+    $('mic').classList.add('rec'); $('mic').classList.remove('off');
+    $('hint').classList.remove('warn');
+    $('hint').classList.add('rec');
+    $('hint').textContent = COPY[lang].listening;
+  };
+  rec.onresult = e=>{
+    stopListening();
+    const txt = e.results && e.results[0] && e.results[0][0] ? e.results[0][0].transcript : '';
+    if(txt) ask(txt);
+  };
+  rec.onerror = e=>{
+    const err = e && e.error;
+    stopListening();
+    if(err==='no-speech')                    return voiceFail('micNoSpeech');
+    if(err==='aborted')                      return;
+    if(err==='language-not-supported'){
+      if(lang==='ar' && !arFallbackTried){   // Safari prefers ar-SA over ar-EG
+        arFallbackTried=true;
+        try{ startRecognition('ar-SA'); return; }catch(x){}
+      }
+      return voiceFail('micLangUnsupported');
+    }
+    if(err==='audio-capture')                return voiceFail('micNoDevice');
+    if(err==='not-allowed' || err==='service-not-allowed'){ diagnoseMic(); return; }
+    voiceFail('micGeneric');
+  };
+  rec.onend = ()=>{ if(listening) stopListening(); };
+
+  rec.start();   // synchronous — keeps the user-gesture chain alive on iOS
+}
+
+function toggleMic(){
+  primeTTS();
+  const c=COPY[lang];
+
+  if(listening){ try{ rec && rec.stop(); }catch(e){} stopListening(); return; }
+
+  if(!SR){                       return voiceFail('micUnsupported'); }
+  if(!window.isSecureContext){   return voiceFail('micInsecure'); }
+  if(embeddedMicBlocked()){      return voiceFail(isIOS ? 'micEmbediOS' : 'micEmbedded'); }
+
+  try{ speechSynthesis.cancel(); }catch(e){}
+  arFallbackTried=false;
+
+  try{
+    startRecognition(lang==='ar' ? 'ar-EG' : 'en-US');
+  }catch(err){
+    stopListening();
+    diagnoseMic();
+  }
+}
+
+setLang('ar');
+</script>
+</body>
+</html>
